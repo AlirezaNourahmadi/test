@@ -20,6 +20,7 @@ import httpx
 import logging
 
 from xray_runtime import XrayRuntime
+from cloudflare_tunnel import CloudflareTunnelRuntime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("X4G")
@@ -36,6 +37,7 @@ PERSISTENCE_MODE = os.environ.get("PERSISTENCE_MODE", "ephemeral").strip().lower
 PERSISTENCE_DURABLE = PERSISTENCE_MODE in {"volume", "persistent"}
 SAVE_LOCK = asyncio.Lock()
 XRAY = XrayRuntime()
+CLOUDFLARE_TUNNEL = CloudflareTunnelRuntime()
 XRAY_MONITOR_TASK: asyncio.Task | None = None
 
 def _load_or_create_secret() -> str:
@@ -236,6 +238,7 @@ async def startup():
         )
     await load_state()
     await XRAY.start(await desired_xray_users())
+    await CLOUDFLARE_TUNNEL.start()
     if XRAY.enabled:
         XRAY_MONITOR_TASK = asyncio.create_task(xray_monitor_loop())
     await _tg_start_bot()
@@ -251,6 +254,7 @@ async def shutdown():
         XRAY_MONITOR_TASK = None
     await collect_xray_traffic()
     await save_state()
+    await CLOUDFLARE_TUNNEL.stop()
     await XRAY.stop()
     await _tg_stop_bot()
     if http_client:
@@ -331,7 +335,7 @@ def vless_link_for_link(link: dict, uid: str, host: str) -> str:
     proto = link.get("protocol", DEFAULT_PROTOCOL)
     path_override = None
     if XRAY.enabled:
-        host = XRAY.connection_host(host)
+        host = CLOUDFLARE_TUNNEL.connection_host(XRAY.connection_host(host))
         proto = "vless-ws"
         path_override = XRAY.ws_path
     return generate_vless_link(
@@ -500,6 +504,15 @@ async def health():
             "listen_port": XRAY.listen_port if XRAY.enabled else None,
             "public_host_configured": bool(XRAY.public_host),
             "outbound_domain_strategy": XRAY.outbound_domain_strategy,
+        },
+        "cloudflare_tunnel": {
+            "enabled": CLOUDFLARE_TUNNEL.enabled,
+            "running": CLOUDFLARE_TUNNEL.running,
+            "ready": CLOUDFLARE_TUNNEL.ready,
+            "public_host": CLOUDFLARE_TUNNEL.public_host or None,
+            "origin": CLOUDFLARE_TUNNEL.origin_url
+            if CLOUDFLARE_TUNNEL.enabled
+            else None,
         },
     }
     return JSONResponse(

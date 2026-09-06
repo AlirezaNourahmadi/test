@@ -27,6 +27,10 @@ test flow without adding paid Northflank resources.
    fail with `Network is unreachable` (`connect_ex=99`). Random IPv6 selection
    explained intermittent first-connection failures; outbound resolution now
    uses `UseIPv4`.
+6. The Android NPV trace resolved the public Xray hostname but timed out while
+   dialing the Northflank ingress IP `35.193.113.78:443`. The matching service
+   logs contained no request. This is a pre-ingress network path failure, not a
+   `/data`, UUID, VLESS, WebSocket, or Xray outbound failure.
 
 ## Code changes
 
@@ -67,6 +71,15 @@ test flow without adding paid Northflank resources.
 - Added a multi-stage `Dockerfile` using official Xray Core `26.3.27`.
 - Added a non-root runtime user and `/data` ownership.
 - Added `.dockerignore`.
+- Added pinned `cloudflared` `2026.5.2` to the multi-stage image.
+
+### `cloudflare_tunnel.py`
+
+- Added a no-account Cloudflare Quick Tunnel to the loopback Xray origin.
+- Forced IPv4 and HTTP/2 for predictable Northflank egress.
+- Parsed and published the generated `*.trycloudflare.com` hostname.
+- Added background recovery and direct-host fallback.
+- Prevented stale tunnel hostnames from being generated after process failure.
 
 ### Tests
 
@@ -76,6 +89,8 @@ test flow without adding paid Northflank resources.
 - Added a regression assertion for the IPv4-only Northflank outbound strategy.
 - Added an opt-in real Xray integration test that verifies both HTTPS/TCP and
   DNS/UDP through a dynamically added panel user.
+- Added Quick Tunnel URL parsing, command, preference, fallback, and stale-host
+  tests.
 
 ## Test evidence
 
@@ -88,6 +103,11 @@ The following local acceptance sequence passed on 2026-09-06:
 - Xray traffic counters added `4906` bytes to panel state.
 - After a full FastAPI/Xray restart using the same data directory, the link was
   loaded and HTTPS again returned `204`.
+- The pinned `cloudflared` command created an IPv4/HTTP2 Quick Tunnel and
+  proxied a public HTTPS request to a loopback origin.
+- A complete local client test through TLS Cloudflare, Quick Tunnel, official
+  server Xray, and the direct outbound returned three consecutive HTTPS `204`
+  responses and a DNS/UDP A record.
 
 ## Northflank changes
 
@@ -122,3 +142,7 @@ The following local acceptance sequence passed on 2026-09-06:
   link from the updated panel for acceptance testing.
 - Northflank-mode links use port 443, TLS, WebSocket path `/ws`, and ALPN
   `http/1.1`.
+- While healthy, the no-cost test deployment now emits a random
+  `*.trycloudflare.com` edge hostname to bypass the unreachable Northflank
+  ingress path observed on Android. Cloudflare does not provide an SLA for
+  Quick Tunnels, and the hostname changes after tunnel/container restart.

@@ -9,8 +9,10 @@
 4. The panel generates an Xray configuration containing every allowed UUID.
 5. `xray run -test` validates the generated configuration.
 6. Xray starts on port `10000`; its private API starts on loopback port `10085`.
-7. FastAPI starts its traffic/quota monitor.
-8. `/health` returns HTTP 200 with `ok` only when storage is writable and Xray
+7. `cloudflared` creates an IPv4/HTTP2 Quick Tunnel to Xray and publishes its
+   current `*.trycloudflare.com` hostname.
+8. FastAPI starts its traffic/quota monitor.
+9. `/health` returns HTTP 200 with `ok` only when storage is writable and Xray
    is running; otherwise it returns HTTP 503 with `degraded`.
 
 ## 2. Administrator login
@@ -27,14 +29,16 @@
 2. The panel generates an RFC 4122 UUID v4.
 3. Link metadata is written atomically to `/data/x4g_state.json`.
 4. The UUID is added to Xray through the private HandlerService.
-5. The response contains a VLESS link using the Xray public hostname and `/ws`.
+5. The response contains a VLESS link using the ready Cloudflare hostname and
+   `/ws`; it falls back to the direct Xray hostname if the tunnel is unavailable.
 6. The subscription endpoints continue to live on the panel hostname.
 
 ## 4. Client connection
 
-1. The client resolves `xray--test--tvbmvy4f8p8m.code.run`.
-2. It establishes TLS to Northflank on public port 443.
-3. Northflank forwards the WebSocket request to container port `10000`.
+1. The client resolves the current `*.trycloudflare.com` hostname.
+2. It establishes TLS to Cloudflare on public port 443.
+3. Cloudflare forwards the WebSocket request through `cloudflared` to Xray on
+   container port `10000`.
 4. Xray validates the VLESS UUID.
 5. Xray resolves domain destinations to IPv4 and relays TCP or UDP traffic
    through its `freedom` outbound.
@@ -71,6 +75,8 @@
    current deployment has no volume.
 5. If a volume is added later, replacement containers load the same state and
    Xray starts with all currently allowed UUIDs.
+6. A Quick Tunnel restart produces a new hostname, so clients must refresh the
+   generated link or subscription after a container replacement.
 
 ## 9. Operational health check
 
@@ -82,6 +88,7 @@
 - Xray internal listen port
 - whether the public Xray hostname is configured
 - outbound domain strategy (`UseIPv4` in the current deployment)
+- Cloudflare Tunnel enabled/running/ready state and current public hostname
 
 Northflank uses this endpoint as its readiness probe before routing traffic to
 a replacement container.

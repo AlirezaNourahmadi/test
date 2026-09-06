@@ -16,6 +16,7 @@
 - Runtime mode: default image ENTRYPOINT/CMD
 - Image user: `10001:10001`
 - Xray image/version: `ghcr.io/xtls/xray-core:26.3.27`
+- Cloudflare image/version: `cloudflare/cloudflared:2026.5.2`
 
 ## Networking
 
@@ -45,6 +46,10 @@ XRAY_API_PORT=10085
 XRAY_WS_PATH=/ws
 XRAY_PUBLIC_PORT=443
 XRAY_OUTBOUND_DOMAIN_STRATEGY=UseIPv4
+CLOUDFLARE_QUICK_TUNNEL_ENABLED=1
+CLOUDFLARE_TUNNEL_ORIGIN=http://127.0.0.1:10000
+CLOUDFLARE_EDGE_IP_VERSION=4
+CLOUDFLARE_TUNNEL_PROTOCOL=http2
 ```
 
 Optional production overrides are `ADMIN_PASSWORD`, `SECRET_KEY`,
@@ -96,6 +101,13 @@ Expected fields:
     "listen_port": 10000,
     "public_host_configured": true,
     "outbound_domain_strategy": "UseIPv4"
+  },
+  "cloudflare_tunnel": {
+    "enabled": true,
+    "running": true,
+    "ready": true,
+    "public_host": "RANDOM.trycloudflare.com",
+    "origin": "http://127.0.0.1:10000"
   }
 }
 ```
@@ -110,13 +122,20 @@ running, allowing the readiness probe to remove an unhealthy pod from routing.
 ## Functional verification
 
 1. Open the panel at `/login`.
-2. Create a new configuration after this deployment. Old links using
+2. Wait until `/health` reports `cloudflare_tunnel.ready=true`.
+3. Create a new configuration after this deployment. Old links using
    `/ws/<uuid>` target the retired Python relay path and are not the acceptance
    test for this architecture.
-3. Import the generated link into V2Box, NPV Tunnel, v2rayNG, or Xray Core.
-4. Connect and load an HTTPS page.
-5. Verify a DNS lookup also succeeds through the tunnel.
-6. Confirm the dashboard records traffic for the new configuration.
+4. Confirm the generated host ends in `.trycloudflare.com`.
+5. Import the generated link into V2Box, NPV Tunnel, v2rayNG, or Xray Core.
+6. Connect and load an HTTPS page.
+7. Verify a DNS lookup also succeeds through the tunnel.
+8. Confirm the dashboard records traffic for the new configuration.
+
+The Quick Tunnel hostname is ephemeral and changes after a cloudflared or
+container restart. Refresh the subscription or copy the current panel link
+after such a restart. Use a named Cloudflare Tunnel with a custom domain when a
+stable production hostname is required.
 
 Do not use a redeploy as a persistence acceptance test in the current no-volume
 mode; losing panel state after container replacement is expected.
