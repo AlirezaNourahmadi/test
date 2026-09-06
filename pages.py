@@ -739,14 +739,10 @@ a{color:inherit;text-decoration:none}
       </div>
       <div class="fg" style="flex:1"><label>ALPN (خالی = پیش‌فرض)</label><input class="fi" id="el-alpn" placeholder="مثلاً: h2,http/1.1" style="width:100%"></div>
     </div>
-    <div class="form-row" style="margin-bottom:16px">
-      <div class="fg" style="flex:1"><label>پورت اتصال</label><input class="fi" id="el-port" type="number" min="1" max="65535" style="width:100%"></div>
-      <div class="fg" style="flex:1"><label>محدودیت آی‌پی (0 = نامحدود)</label><input class="fi" id="el-iplimit" type="number" min="0" step="1" style="width:100%"></div>
-    </div>
-    <div class="form-row" style="margin-bottom:16px">
-      <div class="fg" style="flex:1"><label>محدودیت سرعت (0 = نامحدود)</label><input class="fi" id="el-speed" type="number" min="0" step="0.5" style="width:100%"></div>
-      <div class="fg"><label>واحد</label><select class="fs" id="el-speed-unit"><option value="MBIT">Mbps</option><option value="KB">KB/s</option><option value="MB">MB/s</option></select></div>
-    </div>
+    <input id="el-port" type="hidden" value="443">
+    <input id="el-iplimit" type="hidden" value="0">
+    <input id="el-speed" type="hidden" value="0">
+    <select id="el-speed-unit" style="display:none"><option value="MBIT">Mbps</option></select>
     <div class="cl"><i class="ti ti-info-circle"></i><span>برای حفظ انقضای فعلی، فیلد انقضا را صفر بگذارید.</span></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-o" onclick="closeModal('modal-edit-link')">انصراف</button>
@@ -897,20 +893,13 @@ a{color:inherit;text-decoration:none}
         <div class="cp-block-label"><i class="ti ti-plug-connected"></i> پروتکل انتقال</div>
         <select id="nl-proto" style="display:none">
           <option value="vless-ws">VLESS / WebSocket</option>
-          <option value="xhttp">XHTTP Ultra · mode: auto</option>
         </select>
-        <div class="proto-cards" style="grid-template-columns:repeat(2,1fr)">
+        <div class="proto-cards" style="grid-template-columns:1fr">
           <div class="proto-card active" data-val="vless-ws" onclick="selectProto('vless-ws',this)">
             <div class="proto-card-check"><i class="ti ti-check"></i></div>
             <div class="proto-card-icon"><i class="ti ti-link"></i></div>
             <div class="proto-card-title">VLESS / WS</div>
             <div class="proto-card-desc">پایدار و همه‌منظوره</div>
-          </div>
-          <div class="proto-card" data-val="xhttp" onclick="selectProto('xhttp',this)">
-            <div class="proto-card-check"><i class="ti ti-check"></i></div>
-            <div class="proto-card-icon"><i class="ti ti-bolt"></i></div>
-            <div class="proto-card-title">XHTTP · mode: auto</div>
-            <div class="proto-card-desc">انتخاب خودکار packet-up/stream-up</div>
           </div>
         </div>
       </div>
@@ -933,49 +922,16 @@ a{color:inherit;text-decoration:none}
         <div class="cp-block">
           <div class="cp-block-label"><i class="ti ti-antenna-bars-5"></i> ALPN</div>
           <select class="cp-input-full fs" id="nl-alpn-preset" onchange="onAlpnPresetChange()">
-            <option value="">پیش‌فرض پروتکل</option>
-            <option value="h2,http/1.1">h2,http/1.1</option>
             <option value="http/1.1">http/1.1</option>
-            <option value="h2">h2</option>
-            <option value="__custom__">دستی...</option>
           </select>
           <div class="cp-mini-row">
             <input class="cp-input-full" id="nl-alpn" placeholder="مقدار دستی ALPN" style="display:none">
           </div>
         </div>
       </div>
-      <div class="cp-row mb16" style="grid-template-columns:1fr">
-        <div class="cp-block">
-          <div class="cp-block-label"><i class="ti ti-users"></i> محدودیت آی‌پی / کاربر هم‌زمان</div>
-          <input class="cp-input-full" id="nl-iplimit" type="number" min="0" step="1" placeholder="0 = نامحدود" value="0">
-          <div class="chip-row" id="iplimit-chips">
-            <span class="chip active" onclick="setIpLimit(0,this)">نامحدود</span>
-            <span class="chip" onclick="setIpLimit(1,this)">۱ کاربر</span>
-            <span class="chip" onclick="setIpLimit(2,this)">۲ کاربر</span>
-            <span class="chip" onclick="setIpLimit(5,this)">۵ کاربر</span>
-          </div>
-        </div>
-      </div>
-      <div class="cp-row mb16">
-        <div class="cp-block" style="flex:1">
-          <div class="cp-block-label"><i class="ti ti-gauge"></i> محدودیت سرعت</div>
-          <div class="form-row">
-            <input class="cp-input-full" id="nl-speed" type="number" min="0" step="0.5" placeholder="0 = نامحدود" value="0" style="flex:1">
-            <select class="fs" id="nl-speed-unit" style="flex:0 0 100px">
-              <option value="MBIT" selected>Mbps</option>
-              <option value="KB">KB/s</option>
-              <option value="MB">MB/s</option>
-            </select>
-          </div>
-          <div class="chip-row" id="speed-chips">
-            <span class="chip active" onclick="setSpeedLimit(0,this)">نامحدود</span>
-            <span class="chip" onclick="setSpeedLimit(1,this)">۱ Mbps</span>
-            <span class="chip" onclick="setSpeedLimit(5,this)">۵ Mbps</span>
-            <span class="chip" onclick="setSpeedLimit(10,this)">۱۰ Mbps</span>
-            <span class="chip" onclick="setSpeedLimit(25,this)">۲۵ Mbps</span>
-          </div>
-        </div>
-      </div>
+      <input id="nl-iplimit" type="hidden" value="0">
+      <input id="nl-speed" type="hidden" value="0">
+      <select id="nl-speed-unit" style="display:none"><option value="MBIT">Mbps</option></select>
       <div class="cp-footer">
         <div class="cp-footer-note"><i class="ti ti-info-circle"></i> UUID کاملاً رندوم تولید می‌شود · فقط UUID‌های ثبت‌شده اجازه اتصال دارند · پروتکل پس از ساخت قابل تغییر نیست.</div>
         <button class="cp-submit-btn" onclick="createLink()"><i class="ti ti-link-plus"></i> ساخت کانفیگ</button>

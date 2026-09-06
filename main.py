@@ -4,6 +4,7 @@ import os
 import hashlib
 import secrets
 import time
+import uuid as uuid_lib
 import aiofiles
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -18,6 +19,8 @@ import uvicorn
 import httpx
 import logging
 
+from xray_runtime import XrayRuntime
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("X4G")
 
@@ -30,6 +33,8 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DATA_FILE = DATA_DIR / "x4g_state.json"
 SECRET_FILE = DATA_DIR / "x4g_secret.key"
 SAVE_LOCK = asyncio.Lock()
+XRAY = XrayRuntime()
+XRAY_MONITOR_TASK: asyncio.Task | None = None
 
 def _load_or_create_secret() -> str:
     """SECRET_KEY را روی دیسک ذخیره و ثابت نگه می‌دارد.
@@ -80,12 +85,30 @@ async def load_state():
             SUBS.update(data.get("subs", {}))
             if "password_hash" in data:
                 AUTH["password_hash"] = data["password_hash"]
+            state_migrated = False
+            if XRAY.enabled:
+                for link in LINKS.values():
+                    previous = (
+                        link.get("protocol"),
+                        link.get("alpn"),
+                        link.get("port"),
+                        link.get("ip_limit"),
+                        link.get("speed_limit_bytes"),
+                    )
+                    link["protocol"] = "vless-ws"
+                    link["alpn"] = "http/1.1"
+                    link["port"] = XRAY.public_port
+                    link["ip_limit"] = 0
+                    link["speed_limit_bytes"] = 0
+                    state_migrated = state_migrated or previous != (
+                        "vless-ws", "http/1.1", XRAY.public_port, 0, 0
+                    )
             # لینک پیش‌فرضی که در نسخه‌های قبلی به‌صورت خودکار ساخته می‌شد دیگر
             # پشتیبانی نمی‌شود؛ اگر از قبل روی دیسک ذخیره شده باشد، حذفش می‌کنیم.
             legacy_default_uids = [uid for uid, l in LINKS.items() if l.get("is_default")]
             for uid in legacy_default_uids:
                 LINKS.pop(uid, None)
-            if legacy_default_uids:
+            if legacy_default_uids or state_migrated:
                 asyncio.create_task(save_state())
             logger.info(f"State loaded: {len(LINKS)} links, {len(SUBS)} subs")
     except Exception as e:
@@ -105,8 +128,10 @@ async def save_state():
             async with aiofiles.open(tmp, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(data, ensure_ascii=False, indent=2))
             tmp.replace(DATA_FILE)
+            return True
         except Exception as e:
             logger.warning(f"Could not save state: {e}")
+            return False
 
 # ── In-memory state ───────────────────────────────────────────────────────────
 connections: dict = {}
@@ -197,20 +222,30 @@ async def require_auth(request: Request):
 # ── Startup / Shutdown ────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup():
-    global http_client
+    global http_client, XRAY_MONITOR_TASK
     limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
     timeout = httpx.Timeout(30.0, connect=10.0)
     http_client = httpx.AsyncClient(
         limits=limits, timeout=timeout, follow_redirects=True,
     )
     await load_state()
+    await XRAY.start(await desired_xray_users())
+    if XRAY.enabled:
+        XRAY_MONITOR_TASK = asyncio.create_task(xray_monitor_loop())
     await _tg_start_bot()
     log_activity("system", "سرور راه‌اندازی شد", "ok")
-    logger.info(f"X4G v9.8 started on port {CONFIG['port']}")
+    logger.info(f"X4G v10.0-northflank started on port {CONFIG['port']}")
 
 @app.on_event("shutdown")
 async def shutdown():
+    global XRAY_MONITOR_TASK
+    if XRAY_MONITOR_TASK:
+        XRAY_MONITOR_TASK.cancel()
+        await asyncio.gather(XRAY_MONITOR_TASK, return_exceptions=True)
+        XRAY_MONITOR_TASK = None
+    await collect_xray_traffic()
     await save_state()
+    await XRAY.stop()
     await _tg_stop_bot()
     if http_client:
         await http_client.aclose()
@@ -230,8 +265,7 @@ def get_host(request: Request | None = None) -> str:
     return os.environ.get("RAILWAY_PUBLIC_DOMAIN", CONFIG["host"])
 
 def generate_uuid() -> str:
-    h = secrets.token_hex(16)
-    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+    return str(uuid_lib.uuid4())
     
 def now_ir() -> datetime:
     return datetime.now(IRAN_TZ)
@@ -244,6 +278,7 @@ def generate_vless_link(
     fingerprint: str | None = None,
     alpn: str | None = None,
     port: int | None = None,
+    path_override: str | None = None,
 ) -> str:
     """می‌سازد VLESS share-link متناسب با پروتکل انتخاب‌شده (WS کلاسیک یا یکی از مدهای XHTTP).
     fingerprint / alpn / port در صورت ندادن، از پیش‌فرض‌های خود پروتکل استفاده می‌شوند."""
@@ -256,7 +291,7 @@ def generate_vless_link(
         port_val = DEFAULT_PORT
 
     if protocol == "vless-ws":
-        path = f"/ws/{uuid}"
+        path = path_override or f"/ws/{uuid}"
         params = {
             "encryption": "none",
             "security": "tls",
@@ -288,13 +323,19 @@ def generate_vless_link(
 def vless_link_for_link(link: dict, uid: str, host: str) -> str:
     """generate_vless_link رو با تنظیمات دستی همون کانفیگ (fingerprint/alpn/port) صدا می‌زنه."""
     proto = link.get("protocol", DEFAULT_PROTOCOL)
+    path_override = None
+    if XRAY.enabled:
+        host = XRAY.connection_host(host)
+        proto = "vless-ws"
+        path_override = XRAY.ws_path
     return generate_vless_link(
         uid, host,
         remark=f"AR3NA-{link.get('label','')}",
         protocol=proto,
         fingerprint=link.get("fingerprint"),
         alpn=link.get("alpn"),
-        port=link.get("port"),
+        port=XRAY.public_port if XRAY.enabled else link.get("port"),
+        path_override=path_override,
     )
 
 def uptime() -> str:
@@ -344,6 +385,54 @@ def is_link_allowed(link: dict | None) -> bool:
         return False
     return True
 
+
+async def desired_xray_users() -> set[str]:
+    async with LINKS_LOCK:
+        return {uid for uid, link in LINKS.items() if is_link_allowed(link)}
+
+
+async def reconcile_xray_users() -> None:
+    await XRAY.reconcile(await desired_xray_users())
+
+
+async def collect_xray_traffic() -> bool:
+    """Move Xray's per-user byte deltas into the panel's persistent counters."""
+    if not XRAY.enabled or not XRAY.running:
+        return False
+    deltas = await XRAY.collect_traffic_deltas()
+    if not deltas:
+        return False
+
+    total_delta = 0
+    async with LINKS_LOCK:
+        for uid, delta in deltas.items():
+            link = LINKS.get(uid)
+            if not link:
+                continue
+            link["used_bytes"] = int(link.get("used_bytes", 0)) + delta
+            total_delta += delta
+
+    if total_delta:
+        stats["total_bytes"] += total_delta
+        hourly_traffic[now_ir().strftime("%H:00")] += total_delta
+        await save_state()
+        await reconcile_xray_users()
+        return True
+    return False
+
+
+async def xray_monitor_loop() -> None:
+    interval = max(5, int(os.environ.get("XRAY_STATS_INTERVAL", "15")))
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await collect_xray_traffic()
+            await reconcile_xray_users()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"Xray monitor error: {exc}")
+
 def fmt_bytes(b: int) -> str:
     if b < 1024: return f"{b} B"
     if b < 1024**2: return f"{b/1024:.1f} KB"
@@ -383,11 +472,27 @@ def client_ip(request: Request) -> str:
 # ── Basic endpoints ───────────────────────────────────────────────────────────
 @app.get("/")
 async def root():
-    return {"service": "X4G", "version": "9.5", "status": "active", "channel": "https://t.me/X4GHUB"}
+    return {"service": "X4G", "version": "10.0-northflank", "status": "active", "channel": "https://t.me/X4GHUB"}
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "connections": len(connections), "uptime": uptime()}
+    persistence_ready = DATA_DIR.is_dir() and os.access(DATA_DIR, os.W_OK)
+    xray_ready = not XRAY.enabled or XRAY.running
+    return {
+        "status": "ok" if persistence_ready and xray_ready else "degraded",
+        "connections": len(connections),
+        "uptime": uptime(),
+        "persistence": {
+            "path": str(DATA_DIR),
+            "writable": persistence_ready,
+        },
+        "xray": {
+            "enabled": XRAY.enabled,
+            "running": XRAY.running,
+            "listen_port": XRAY.listen_port if XRAY.enabled else None,
+            "public_host_configured": bool(XRAY.public_host),
+        },
+    }
 
 # ── Subscription (single link) ────────────────────────────────────────────────
 @app.get("/sub/{uuid}")
@@ -584,6 +689,12 @@ async def make_link(
     ip_limit: int = 0,
     speed_limit_bytes: int = 0,
 ) -> tuple[str, dict]:
+    if XRAY.enabled:
+        protocol = "vless-ws"
+        port = XRAY.public_port
+        alpn = "http/1.1"
+        ip_limit = 0
+        speed_limit_bytes = 0
     if protocol not in PROTOCOLS:
         protocol = DEFAULT_PROTOCOL
     fingerprint = (fingerprint or DEFAULT_FINGERPRINT).strip().lower()
@@ -609,7 +720,8 @@ async def make_link(
             "ip_limit": max(0, ip_limit),
             "speed_limit_bytes": max(0, speed_limit_bytes),
         }
-    asyncio.create_task(save_state())
+    await save_state()
+    await reconcile_xray_users()
     log_activity("link", f"کانفیگ «{LINKS[uid]['label']}» ساخته شد", "ok")
     return uid, LINKS[uid]
 
@@ -619,7 +731,8 @@ async def remove_link(uid: str) -> str | None:
             return None
         label = LINKS[uid].get("label", uid)
         del LINKS[uid]
-    asyncio.create_task(save_state())
+    await save_state()
+    await reconcile_xray_users()
     log_activity("link", f"کانفیگ «{label}» حذف شد", "err")
     return label
 
@@ -630,7 +743,8 @@ async def set_link_active(uid: str, active: bool) -> dict | None:
         LINKS[uid]["active"] = bool(active)
         label = LINKS[uid]["label"]
     log_activity("link", f"کانفیگ «{label}» {'فعال' if active else 'غیرفعال'} شد", "ok" if active else "warn")
-    asyncio.create_task(save_state())
+    await save_state()
+    await reconcile_xray_users()
     return LINKS[uid]
 
 # ── Link Management ───────────────────────────────────────────────────────────
@@ -728,29 +842,39 @@ async def update_link(uid: str, request: Request, _=Depends(require_auth)):
             fp = str(body.get("fingerprint") or DEFAULT_FINGERPRINT).strip().lower()
             link["fingerprint"] = fp if fp in FINGERPRINTS else DEFAULT_FINGERPRINT
         if "alpn" in body:
-            link["alpn"] = str(body.get("alpn") or "").strip()[:100]
+            link["alpn"] = "http/1.1" if XRAY.enabled else str(body.get("alpn") or "").strip()[:100]
         if "port" in body:
-            try:
-                p = int(body.get("port") or DEFAULT_PORT)
-            except (TypeError, ValueError):
-                p = DEFAULT_PORT
-            link["port"] = p if (MIN_PORT <= p <= MAX_PORT) else DEFAULT_PORT
+            if XRAY.enabled:
+                link["port"] = XRAY.public_port
+            else:
+                try:
+                    p = int(body.get("port") or DEFAULT_PORT)
+                except (TypeError, ValueError):
+                    p = DEFAULT_PORT
+                link["port"] = p if (MIN_PORT <= p <= MAX_PORT) else DEFAULT_PORT
         if "ip_limit" in body:
-            try:
-                il = int(body.get("ip_limit") or 0)
-            except (TypeError, ValueError):
-                il = 0
-            link["ip_limit"] = max(0, il)
+            if XRAY.enabled:
+                link["ip_limit"] = 0
+            else:
+                try:
+                    il = int(body.get("ip_limit") or 0)
+                except (TypeError, ValueError):
+                    il = 0
+                link["ip_limit"] = max(0, il)
         if "speed_limit_value" in body:
-            sv = float(body.get("speed_limit_value") or 0)
-            su = body.get("speed_limit_unit") or "MBIT"
-            link["speed_limit_bytes"] = 0 if sv <= 0 else parse_speed_to_bytes(sv, su)
+            if XRAY.enabled:
+                link["speed_limit_bytes"] = 0
+            else:
+                sv = float(body.get("speed_limit_value") or 0)
+                su = body.get("speed_limit_unit") or "MBIT"
+                link["speed_limit_bytes"] = 0 if sv <= 0 else parse_speed_to_bytes(sv, su)
             from speed_limit import reset_bucket
             reset_bucket(uid)
         if any(k in body for k in ("label", "note", "limit_value", "expires_days", "fingerprint", "alpn", "port", "ip_limit", "speed_limit_value")):
             log_activity("link", f"کانفیگ «{link['label']}» ویرایش شد", "info")
 
-    asyncio.create_task(save_state())
+    await save_state()
+    await reconcile_xray_users()
     return {"ok": True}
 
 @app.delete("/api/links/{uid}")
