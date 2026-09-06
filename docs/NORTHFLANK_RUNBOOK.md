@@ -44,6 +44,7 @@ XRAY_PORT=10000
 XRAY_API_PORT=10085
 XRAY_WS_PATH=/ws
 XRAY_PUBLIC_PORT=443
+XRAY_OUTBOUND_DOMAIN_STRATEGY=UseIPv4
 ```
 
 Optional production overrides are `ADMIN_PASSWORD`, `SECRET_KEY`,
@@ -80,10 +81,15 @@ Expected fields:
     "enabled": true,
     "running": true,
     "listen_port": 10000,
-    "public_host_configured": true
+    "public_host_configured": true,
+    "outbound_domain_strategy": "UseIPv4"
   }
 }
 ```
+
+Do not change the outbound strategy to `UseIP` on this deployment. The pod can
+resolve IPv6 addresses but has no working IPv6 route, which causes intermittent
+destination failures.
 
 ## Functional verification
 

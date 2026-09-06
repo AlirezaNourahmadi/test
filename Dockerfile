@@ -11,7 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XRAY_ENABLED=1 \
     XRAY_PORT=10000 \
     XRAY_API_PORT=10085 \
-    XRAY_WS_PATH=/ws
+    XRAY_WS_PATH=/ws \
+    XRAY_OUTBOUND_DOMAIN_STRATEGY=UseIPv4
 
 RUN groupadd --gid 10001 x4g \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin x4g

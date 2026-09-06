@@ -35,7 +35,8 @@
 2. It establishes TLS to Northflank on public port 443.
 3. Northflank forwards the WebSocket request to container port `10000`.
 4. Xray validates the VLESS UUID.
-5. Xray relays TCP or UDP traffic through its `freedom` outbound.
+5. Xray resolves domain destinations to IPv4 and relays TCP or UDP traffic
+   through its `freedom` outbound.
 6. Per-user uplink/downlink counters are maintained by Xray.
 
 ## 5. Traffic accounting and quota
@@ -79,3 +80,4 @@
 - Xray enabled/running state
 - Xray internal listen port
 - whether the public Xray hostname is configured
+- outbound domain strategy (`UseIPv4` in the current deployment)

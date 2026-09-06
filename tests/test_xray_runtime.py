@@ -35,12 +35,14 @@ class XrayConfigTests(unittest.TestCase):
 
         proxy = next(item for item in config["inbounds"] if item["tag"] == XRAY_INBOUND_TAG)
         api = next(item for item in config["inbounds"] if item["tag"] == "api")
+        direct = next(item for item in config["outbounds"] if item["tag"] == "direct")
         self.assertEqual(proxy["port"], 11000)
         self.assertEqual(proxy["streamSettings"]["network"], "ws")
         self.assertEqual(proxy["streamSettings"]["wsSettings"]["path"], "/ws")
         self.assertEqual(proxy["settings"]["clients"][0]["id"], TEST_UUID)
         self.assertEqual(api["listen"], "127.0.0.1")
         self.assertEqual(config["api"]["services"], ["HandlerService", "StatsService"])
+        self.assertEqual(direct["settings"]["domainStrategy"], "UseIPv4")
 
     def test_public_connection_settings_use_environment(self):
         with patch.dict(

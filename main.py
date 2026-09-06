@@ -499,6 +499,7 @@ async def health():
             "running": XRAY.running,
             "listen_port": XRAY.listen_port if XRAY.enabled else None,
             "public_host_configured": bool(XRAY.public_host),
+            "outbound_domain_strategy": XRAY.outbound_domain_strategy,
         },
     }
 

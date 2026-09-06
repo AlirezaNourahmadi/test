@@ -38,6 +38,10 @@ class XrayRuntime:
             self.ws_path = "/" + self.ws_path
         self.public_host = os.environ.get("XRAY_PUBLIC_HOST", "").strip()
         self.public_port = int(os.environ.get("XRAY_PUBLIC_PORT", "443"))
+        self.outbound_domain_strategy = (
+            os.environ.get("XRAY_OUTBOUND_DOMAIN_STRATEGY", "UseIPv4").strip()
+            or "UseIPv4"
+        )
         self.config_dir = Path(os.environ.get("XRAY_CONFIG_DIR", "/tmp/x4g-xray"))
         self.config_path = self.config_dir / "config.json"
         self.user_patch_path = self.config_dir / "users.json"
@@ -132,7 +136,7 @@ class XrayRuntime:
                 {
                     "tag": "direct",
                     "protocol": "freedom",
-                    "settings": {"domainStrategy": "UseIP"},
+                    "settings": {"domainStrategy": self.outbound_domain_strategy},
                 },
                 {"tag": "blocked", "protocol": "blackhole"},
             ],

@@ -22,6 +22,11 @@ test flow without adding paid Northflank resources.
    returned process status 0 while reporting that zero users were added. The
    supervisor now validates the operation count and recovers by restarting from
    complete desired state.
+5. The initial official Xray outbound used `UseIP`. Direct inspection inside the
+   Northflank pod showed that IPv6 DNS resolution works but IPv6 connections
+   fail with `Network is unreachable` (`connect_ex=99`). Random IPv6 selection
+   explained intermittent first-connection failures; outbound resolution now
+   uses `UseIPv4`.
 
 ## Code changes
 
@@ -66,6 +71,7 @@ test flow without adding paid Northflank resources.
 - Retained four Python relay regression tests.
 - Added Xray configuration and public endpoint unit tests.
 - Added traffic delta tests.
+- Added a regression assertion for the IPv4-only Northflank outbound strategy.
 - Added an opt-in real Xray integration test that verifies both HTTPS/TCP and
   DNS/UDP through a dynamically added panel user.
 
@@ -89,6 +95,7 @@ The following local acceptance sequence passed on 2026-09-06:
 - Xray public endpoint created as
   `xray--test--tvbmvy4f8p8m.code.run`.
 - Added `XRAY_PUBLIC_HOST` environment variable.
+- Set `XRAY_OUTBOUND_DOMAIN_STRATEGY=UseIPv4` in the container defaults.
 - No volume was created after the Northflank UI showed a paid 6 GB minimum.
 - No PostgreSQL service was created because one replica and atomic JSON state do
   not justify a database.

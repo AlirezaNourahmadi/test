@@ -47,6 +47,12 @@ TCP, UDP, outbound connections, and per-user traffic counters. The custom
 Python relay remains in the repository for Railway compatibility, but links
 created in Northflank mode do not use it.
 
+The Northflank container resolves outbound domains with `UseIPv4`. Runtime
+inspection confirmed that the pod can resolve IPv6 addresses but has no working
+IPv6 route (`connect_ex=99`). Allowing Xray's generic `UseIP` selection could
+therefore choose an unreachable IPv6 address and make otherwise valid sessions
+fail intermittently.
+
 The panel starts Xray at application startup with every allowed UUID. Later
 create, enable, disable, reset, expire, and delete operations are sent to the
 private Xray HandlerService. If a dynamic update fails, the supervisor restarts
@@ -103,6 +109,8 @@ do nothing would be misleading.
 - A non-writable `/data` path is reported by `/health` as `degraded`.
 - Ephemeral storage is reported as `durable: false` but does not degrade the
   service because it is the deliberate current operating mode.
+- Outbound domain resolution defaults to IPv4 because this Northflank runtime
+  does not have a usable IPv6 route.
 - Failed dynamic user synchronization triggers a full Xray restart with the
   desired users.
 - State writes use a temporary file followed by an atomic rename.
