@@ -484,7 +484,7 @@ async def root():
 async def health():
     persistence_ready = DATA_DIR.is_dir() and os.access(DATA_DIR, os.W_OK)
     xray_ready = not XRAY.enabled or XRAY.running
-    return {
+    payload = {
         "status": "ok" if persistence_ready and xray_ready else "degraded",
         "connections": len(connections),
         "uptime": uptime(),
@@ -502,6 +502,10 @@ async def health():
             "outbound_domain_strategy": XRAY.outbound_domain_strategy,
         },
     }
+    return JSONResponse(
+        payload,
+        status_code=200 if persistence_ready and xray_ready else 503,
+    )
 
 # ── Subscription (single link) ────────────────────────────────────────────────
 @app.get("/sub/{uuid}")

@@ -50,6 +50,8 @@ test flow without adding paid Northflank resources.
 - Added storage and Xray details to `/health`.
 - Added explicit ephemeral/durable storage reporting and a startup warning when
   no persistent volume is configured.
+- Made degraded health return HTTP 503 so Northflank readiness checks can gate
+  routing on the official Xray process.
 - Made link create/update/delete persistence synchronous before success.
 - Normalized legacy Northflank records to the supported official WS transport.
 
@@ -96,6 +98,7 @@ The following local acceptance sequence passed on 2026-09-06:
   `xray--test--tvbmvy4f8p8m.code.run`.
 - Added `XRAY_PUBLIC_HOST` environment variable.
 - Set `XRAY_OUTBOUND_DOMAIN_STRATEGY=UseIPv4` in the container defaults.
+- Added an HTTP readiness probe on internal port 8000 and `/health`.
 - No volume was created after the Northflank UI showed a paid 6 GB minimum.
 - No PostgreSQL service was created because one replica and atomic JSON state do
   not justify a database.

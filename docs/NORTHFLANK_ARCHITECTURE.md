@@ -105,8 +105,9 @@ do nothing would be misleading.
 
 - Invalid Xray configuration stops application startup and prevents a false
   healthy deployment.
-- A dead Xray process is reported by `/health` as `degraded`.
-- A non-writable `/data` path is reported by `/health` as `degraded`.
+- A dead Xray process is reported by `/health` as `degraded` with HTTP 503.
+- A non-writable `/data` path is reported by `/health` as `degraded` with HTTP
+  503.
 - Ephemeral storage is reported as `durable: false` but does not degrade the
   service because it is the deliberate current operating mode.
 - Outbound domain resolution defaults to IPv4 because this Northflank runtime
@@ -114,6 +115,11 @@ do nothing would be misleading.
 - Failed dynamic user synchronization triggers a full Xray restart with the
   desired users.
 - State writes use a temporary file followed by an atomic rename.
+
+Northflank has an HTTP readiness probe on panel port `8000` and `/health` with
+a 10-second initial delay, 15-second interval, 5-second timeout, and three-fail
+threshold. New containers receive traffic only after both storage and Xray are
+ready.
 
 ## Security boundaries
 

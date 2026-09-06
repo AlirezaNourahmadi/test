@@ -10,7 +10,8 @@
 5. `xray run -test` validates the generated configuration.
 6. Xray starts on port `10000`; its private API starts on loopback port `10085`.
 7. FastAPI starts its traffic/quota monitor.
-8. `/health` returns `ok` only when storage is writable and Xray is running.
+8. `/health` returns HTTP 200 with `ok` only when storage is writable and Xray
+   is running; otherwise it returns HTTP 503 with `degraded`.
 
 ## 2. Administrator login
 
@@ -81,3 +82,6 @@
 - Xray internal listen port
 - whether the public Xray hostname is configured
 - outbound domain strategy (`UseIPv4` in the current deployment)
+
+Northflank uses this endpoint as its readiness probe before routing traffic to
+a replacement container.

@@ -1,6 +1,8 @@
+import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 os.environ.setdefault("DATA_DIR", tempfile.mkdtemp(prefix="x4g-tests-"))
@@ -58,11 +60,20 @@ class VlessHeaderTests(unittest.IsolatedAsyncioTestCase):
 
 class HealthMetadataTests(unittest.IsolatedAsyncioTestCase):
     async def test_reports_writable_ephemeral_storage_as_not_durable(self):
-        result = await main.health()
+        response = await main.health()
+        result = json.loads(response.body)
 
+        self.assertEqual(response.status_code, 200)
         self.assertTrue(result["persistence"]["writable"])
         self.assertEqual(result["persistence"]["mode"], "ephemeral")
         self.assertFalse(result["persistence"]["durable"])
+
+    async def test_returns_503_when_xray_is_not_running(self):
+        with patch.object(main.XRAY, "enabled", True):
+            response = await main.health()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(json.loads(response.body)["status"], "degraded")
 
 
 if __name__ == "__main__":

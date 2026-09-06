@@ -62,6 +62,19 @@ For optional durable storage later, attach a single read/write volume at
 
 ## Health verification
 
+Northflank readiness probe:
+
+```text
+type=readiness
+protocol=HTTP
+port=8000
+path=/health
+initial_delay=10s
+interval=15s
+timeout=5s
+max_failures=3
+```
+
 ```bash
 curl -fsS https://garibar--test--tvbmvy4f8p8m.code.run/health
 ```
@@ -90,6 +103,9 @@ Expected fields:
 Do not change the outbound strategy to `UseIP` on this deployment. The pod can
 resolve IPv6 addresses but has no working IPv6 route, which causes intermittent
 destination failures.
+
+The endpoint returns HTTP 503 when storage is not writable or Xray is not
+running, allowing the readiness probe to remove an unhealthy pod from routing.
 
 ## Functional verification
 
