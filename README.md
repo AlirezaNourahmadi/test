@@ -1,5 +1,10 @@
 کانال یوتوب : [https://www.youtube.com/@X4GHUB](https://www.youtube.com/@X4GHUB)
 
+> Northflank deployment: use the dedicated `northflank` branch and follow
+> [`docs/NORTHFLANK_RUNBOOK.md`](docs/NORTHFLANK_RUNBOOK.md). This branch runs
+> the panel with official Xray Core and uses a persistent `/data` volume. The
+> Railway-compatible implementation remains on `main`.
+
 # 🚀 X4G
 
 دروازه (Gateway) سریع و مدرن برای تونل‌زنی VLESS روی WebSocket و XHTTP + HTTP Proxy، با داشبورد مدیریتی زیبا، **ربات مدیریت تلگرام**، صفحات ساب حرفه‌ای و قابلیت ساخت لینک‌های اختصاصی با محدودیت ترافیک، سرعت و آی‌پی.
