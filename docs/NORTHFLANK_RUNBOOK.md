@@ -38,6 +38,7 @@ The Dockerfile supplies these defaults:
 
 ```text
 DATA_DIR=/data
+PERSISTENCE_MODE=ephemeral
 XRAY_ENABLED=1
 XRAY_PORT=10000
 XRAY_API_PORT=10085
@@ -48,15 +49,15 @@ XRAY_PUBLIC_PORT=443
 Optional production overrides are `ADMIN_PASSWORD`, `SECRET_KEY`,
 `XRAY_LOG_LEVEL`, and `XRAY_STATS_INTERVAL`.
 
-## Persistent storage
+## Storage mode
 
-- Volume name: `x4g-data`
-- Type: NVMe
-- Size: 6 GB (Northflank minimum shown by the service UI)
-- Access: single read/write attachment
-- Container mount path: `/data`
+No volume or database is attached to the current deployment. `/data` is
+writable container storage, so configurations survive only while that container
+exists. They are lost on redeploy or container replacement. This is the chosen
+no-cost mode and is exposed as `durable: false` by `/health`.
 
-The service must remain at one replica while this volume is attached.
+For optional durable storage later, attach a single read/write volume at
+`/data`, keep one service replica, and set `PERSISTENCE_MODE=volume`.
 
 ## Health verification
 
@@ -69,7 +70,12 @@ Expected fields:
 ```json
 {
   "status": "ok",
-  "persistence": {"path": "/data", "writable": true},
+  "persistence": {
+    "path": "/data",
+    "writable": true,
+    "mode": "ephemeral",
+    "durable": false
+  },
   "xray": {
     "enabled": true,
     "running": true,
@@ -88,12 +94,13 @@ Expected fields:
 3. Import the generated link into V2Box, NPV Tunnel, v2rayNG, or Xray Core.
 4. Connect and load an HTTPS page.
 5. Verify a DNS lookup also succeeds through the tunnel.
-6. Restart the Northflank pod.
-7. Confirm the configuration is still present and still connects.
+6. Confirm the dashboard records traffic for the new configuration.
+
+Do not use a redeploy as a persistence acceptance test in the current no-volume
+mode; losing panel state after container replacement is expected.
 
 ## Rollback
 
 Rollback the Northflank service to commit `8ed93e3` only if the official Xray
 deployment cannot start. This affects only the `northflank` branch/deployment.
 Do not merge or reset the Railway `main` branch.
-

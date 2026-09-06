@@ -32,6 +32,8 @@ app = FastAPI(title="X4G", docs_url=None, redoc_url=None)
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DATA_FILE = DATA_DIR / "x4g_state.json"
 SECRET_FILE = DATA_DIR / "x4g_secret.key"
+PERSISTENCE_MODE = os.environ.get("PERSISTENCE_MODE", "ephemeral").strip().lower() or "ephemeral"
+PERSISTENCE_DURABLE = PERSISTENCE_MODE in {"volume", "persistent"}
 SAVE_LOCK = asyncio.Lock()
 XRAY = XrayRuntime()
 XRAY_MONITOR_TASK: asyncio.Task | None = None
@@ -228,6 +230,10 @@ async def startup():
     http_client = httpx.AsyncClient(
         limits=limits, timeout=timeout, follow_redirects=True,
     )
+    if not PERSISTENCE_DURABLE:
+        logger.warning(
+            "Persistence mode is ephemeral; panel state will be lost when the container is replaced"
+        )
     await load_state()
     await XRAY.start(await desired_xray_users())
     if XRAY.enabled:
@@ -485,6 +491,8 @@ async def health():
         "persistence": {
             "path": str(DATA_DIR),
             "writable": persistence_ready,
+            "mode": PERSISTENCE_MODE,
+            "durable": PERSISTENCE_DURABLE,
         },
         "xray": {
             "enabled": XRAY.enabled,

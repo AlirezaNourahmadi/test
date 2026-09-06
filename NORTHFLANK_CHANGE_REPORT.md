@@ -4,9 +4,9 @@ Date: 2026-09-06
 
 ## Objective
 
-Fix the Northflank deployment at the root: replace the incomplete Python VLESS
-data plane, make panel state persistent, keep Railway behavior isolated on
-`main`, and deliver a repeatable deployment and test flow.
+Fix the Northflank data plane at the root, make storage behavior explicit, keep
+Railway behavior isolated on `main`, and deliver a repeatable deployment and
+test flow without adding paid Northflank resources.
 
 ## Root cause findings
 
@@ -43,6 +43,8 @@ data plane, make panel state persistent, keep Railway behavior isolated on
 - Changed UUID generation to UUID v4.
 - Added traffic quota accounting from official Xray counters.
 - Added storage and Xray details to `/health`.
+- Added explicit ephemeral/durable storage reporting and a startup warning when
+  no persistent volume is configured.
 - Made link create/update/delete persistence synchronous before success.
 - Normalized legacy Northflank records to the supported official WS transport.
 
@@ -87,7 +89,21 @@ The following local acceptance sequence passed on 2026-09-06:
 - Xray public endpoint created as
   `xray--test--tvbmvy4f8p8m.code.run`.
 - Added `XRAY_PUBLIC_HOST` environment variable.
-- Persistent volume specification: `x4g-data`, 6 GB NVMe, mounted at `/data`.
+- No volume was created after the Northflank UI showed a paid 6 GB minimum.
+- No PostgreSQL service was created because one replica and atomic JSON state do
+  not justify a database.
+- Current `/data` is writable but ephemeral; configurations are lost on a
+  redeploy or container replacement.
+
+## Production acceptance
+
+- Panel `/health` returned `ok` with Xray running.
+- Public Xray endpoint completed a WebSocket `101 Switching Protocols` upgrade.
+- A temporary configuration created through the production panel relayed HTTPS
+  successfully with status `204`.
+- UDP DNS through the same production configuration returned an A record.
+- Panel accounting recorded `3655` bytes for the temporary user.
+- The temporary user was deleted and its UUID was rejected afterward.
 
 ## Compatibility and migration
 
@@ -96,4 +112,3 @@ The following local acceptance sequence passed on 2026-09-06:
   link from the updated panel for acceptance testing.
 - Northflank-mode links use port 443, TLS, WebSocket path `/ws`, and ALPN
   `http/1.1`.
-

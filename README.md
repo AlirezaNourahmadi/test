@@ -2,8 +2,10 @@
 
 > Northflank deployment: use the dedicated `northflank` branch and follow
 > [`docs/NORTHFLANK_RUNBOOK.md`](docs/NORTHFLANK_RUNBOOK.md). This branch runs
-> the panel with official Xray Core and uses a persistent `/data` volume. The
-> Railway-compatible implementation remains on `main`.
+> the panel with official Xray Core. The current no-cost deployment uses
+> ephemeral `/data`; its configurations survive process restarts but not a
+> container replacement or redeploy. The Railway-compatible implementation
+> remains on `main`.
 
 # 🚀 X4G
 

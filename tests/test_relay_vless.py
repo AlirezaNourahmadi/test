@@ -4,6 +4,7 @@ import unittest
 
 
 os.environ.setdefault("DATA_DIR", tempfile.mkdtemp(prefix="x4g-tests-"))
+os.environ.setdefault("PERSISTENCE_MODE", "ephemeral")
 
 import main
 from relay_vless import UdpPacketDecoder, parse_vless_header
@@ -53,6 +54,15 @@ class VlessHeaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(address, "1.1.1.1")
         self.assertEqual(port, 53)
         self.assertEqual(UdpPacketDecoder().feed(payload), [dns_packet])
+
+
+class HealthMetadataTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reports_writable_ephemeral_storage_as_not_durable(self):
+        result = await main.health()
+
+        self.assertTrue(result["persistence"]["writable"])
+        self.assertEqual(result["persistence"]["mode"], "ephemeral")
+        self.assertFalse(result["persistence"]["durable"])
 
 
 if __name__ == "__main__":

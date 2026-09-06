@@ -2,8 +2,8 @@
 
 ## 1. Service startup
 
-1. Northflank mounts the persistent volume at `/data`.
-2. FastAPI loads `x4g_state.json` and the persistent secret.
+1. The container starts with writable but ephemeral `/data` storage.
+2. FastAPI loads `x4g_state.json` and the secret if they exist in this container.
 3. Legacy Northflank links are normalized to VLESS/WebSocket, public port 443,
    and ALPN `http/1.1`.
 4. The panel generates an Xray configuration containing every allowed UUID.
@@ -15,7 +15,8 @@
 ## 2. Administrator login
 
 1. Administrator opens `/login` on the panel endpoint.
-2. The submitted password is hashed with the persistent secret.
+2. The submitted password is hashed with the current container's secret unless
+   `SECRET_KEY` is supplied through the environment.
 3. A valid login creates an HTTP-only session cookie.
 4. Protected dashboard and API routes accept the session cookie.
 
@@ -63,17 +64,18 @@
 
 1. FastAPI collects final traffic deltas during graceful shutdown.
 2. State is persisted and Xray is stopped.
-3. The replacement container mounts the same volume.
-4. Stored links and password state are loaded.
-5. Xray starts with all currently allowed UUIDs.
+3. A process restart in the same container reloads the stored links and secret.
+4. A container replacement or redeploy starts with empty state because the
+   current deployment has no volume.
+5. If a volume is added later, replacement containers load the same state and
+   Xray starts with all currently allowed UUIDs.
 
 ## 9. Operational health check
 
 `GET /health` reports:
 
 - overall status (`ok` or `degraded`)
-- `/data` path and write availability
+- `/data` path, write availability, mode, and durability
 - Xray enabled/running state
 - Xray internal listen port
 - whether the public Xray hostname is configured
-

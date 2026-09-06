@@ -5,6 +5,7 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
+    PERSISTENCE_MODE=ephemeral \
     XRAY_BINARY=/usr/local/bin/xray \
     XRAY_CONFIG_DIR=/tmp/x4g-xray \
     XRAY_ENABLED=1 \

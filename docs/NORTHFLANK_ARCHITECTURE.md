@@ -56,11 +56,18 @@ Xray from the desired complete user set instead of leaving partial state.
 
 Panel state is stored atomically in `/data/x4g_state.json`. The session/password
 secret is stored in `/data/x4g_secret.key` unless `SECRET_KEY` is explicitly
-provided.
+provided. The container runs as non-root UID/GID `10001`, and the image declares
+ownership of `/data` for that identity.
 
-Northflank must mount a single read/write persistent volume at `/data`. The
-container runs as non-root UID/GID `10001`, and the image declares ownership of
-`/data` for that identity.
+The current no-cost deployment intentionally has no Northflank volume. Its
+`PERSISTENCE_MODE` is `ephemeral`: state survives application-process restarts
+inside the same container, but it is lost when Northflank replaces or redeploys
+the container. `/health` reports both write availability and durability so a
+writable container filesystem cannot be mistaken for persistent storage.
+
+Durable state remains an optional future change. Attach one read/write volume
+to `/data`, keep the service at one replica, and set
+`PERSISTENCE_MODE=volume`. No code or PostgreSQL migration is required.
 
 PostgreSQL is not needed for this deployment. There is one panel replica, the
 state is small, writes are serialized, and an atomic JSON file is enough. A
@@ -94,6 +101,8 @@ do nothing would be misleading.
   healthy deployment.
 - A dead Xray process is reported by `/health` as `degraded`.
 - A non-writable `/data` path is reported by `/health` as `degraded`.
+- Ephemeral storage is reported as `durable: false` but does not degrade the
+  service because it is the deliberate current operating mode.
 - Failed dynamic user synchronization triggers a full Xray restart with the
   desired users.
 - State writes use a temporary file followed by an atomic rename.
@@ -105,4 +114,3 @@ do nothing would be misleading.
 - Only active, non-expired, under-quota UUIDs are installed in Xray.
 - No panel secret is committed to Git.
 - The container runs as a dedicated non-root user.
-
